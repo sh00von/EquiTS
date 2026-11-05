@@ -1,7 +1,11 @@
 import os
 import sys
 import time
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Ensure project root is first in sys.path before third-party packages (e.g. HuggingFace datasets)
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 import torch
 import yaml
@@ -9,12 +13,23 @@ from equits.model import EquiTS
 from datasets.loader import get_dataloaders
 from equits.losses import compute_forecast_metrics
 
-with open('configs/default.yaml') as f:
+config_path = os.path.join(ROOT_DIR, 'configs', 'default.yaml')
+ckpt_path = os.path.join(ROOT_DIR, 'checkpoints', 'EquiTS_RCPQ_ETTh1_H96.pt')
+
+with open(config_path) as f:
     cfg = yaml.safe_load(f)
+
+# Ensure data_path inside config is also relative to ROOT_DIR
+if 'dataset' in cfg and 'data_path' in cfg['dataset']:
+    if not os.path.isabs(cfg['dataset']['data_path']):
+        cfg['dataset']['data_path'] = os.path.join(ROOT_DIR, cfg['dataset']['data_path'])
 
 train_loader, _, test_loader, _ = get_dataloaders(cfg)
 model = EquiTS(cfg)
-model.load_state_dict(torch.load('checkpoints/EquiTS_RCPQ_ETTh1_H96.pt', map_location='cpu'))
+if os.path.exists(ckpt_path):
+    model.load_state_dict(torch.load(ckpt_path, map_location='cpu'))
+else:
+    print(f"Warning: Checkpoint not found at {ckpt_path}. Using current model weights.")
 model.eval()
 
 # 1. Pre-populate on training data

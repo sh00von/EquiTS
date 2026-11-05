@@ -6,8 +6,11 @@ to map the exact empirical Accuracy-Latency Pareto Trade-off Curve.
 
 import os
 import sys
-# Add project root to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Ensure project root is first in sys.path before third-party packages (e.g. HuggingFace datasets)
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT_DIR not in sys.path:
+    sys.path.insert(0, ROOT_DIR)
 
 import json
 import time
@@ -23,13 +26,22 @@ from equits.losses import compute_forecast_metrics
 
 
 def run_pareto_sweep(
-    config_path: str = "configs/default.yaml",
-    checkpoint_path: str = "checkpoints/EquiTS_RCPQ_ETTh1_H96.pt",
+    config_path: str = None,
+    checkpoint_path: str = None,
     thresholds: List[float] = [2e-7, 5e-7, 1e-6, 3e-6, 7e-6, 1.5e-5, 3e-5],
     device_str: str = "cpu"
 ) -> List[Dict[str, Any]]:
+    if config_path is None:
+        config_path = os.path.join(ROOT_DIR, "configs", "default.yaml")
+    if checkpoint_path is None:
+        checkpoint_path = os.path.join(ROOT_DIR, "checkpoints", "EquiTS_RCPQ_ETTh1_H96.pt")
+
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
+
+    if 'dataset' in config and 'data_path' in config['dataset']:
+        if not os.path.isabs(config['dataset']['data_path']):
+            config['dataset']['data_path'] = os.path.join(ROOT_DIR, config['dataset']['data_path'])
 
     device = torch.device(device_str if torch.cuda.is_available() and device_str == "cuda" else "cpu")
     print(f"Running Pareto Frontier Sweep on: {device}")
