@@ -119,7 +119,7 @@ def main():
     print(f"Device: {device} | Lookback: {config['dataset']['lookback']} | Horizon: {config['dataset']['horizon']}")
 
     if args.dataset.lower() == "all":
-        datasets = ["ETTh1", "ETTm1"]
+        datasets = ["ETTh1", "ETTm1", "Weather"]
     else:
         datasets = [args.dataset]
 
