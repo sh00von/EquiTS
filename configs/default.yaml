@@ -11,6 +11,7 @@ dataset:
   train_ratio: 0.6
   val_ratio: 0.2
   test_ratio: 0.2
+  split_protocol: "tslib"   # "tslib" = borders used by published TSLib-based papers; "ratio" = legacy 60/20/20
   batch_size: 32
   num_workers: 0
 
@@ -33,17 +34,32 @@ memory:
   enabled: true
   max_prototypes: 512 # K
   eps_dim: 16        # d (Early Predictive Signature key dimension)
+  eps_detach_backbone: true # key alignment loss trains only the EPS projection
   shortlist_m: 3     # m for Stage 1 screening
   metric: "wasserstein_normalized" # or "kl_mean_rate"
-  initial_threshold: 0.25 # lambda_0 (in normalized std units)
-  learning_rate_conformal: 0.005 # eta for online CRC
-  target_risk_alpha: 0.05       # alpha (5% maximum false-merge rate)
-  decay_half_life: 500.0        # tau_half for IUDI eviction
+  merge_threshold: 0.25       # W2_bar (normalized std units): predictive equivalence for merging
+  key_gate: 2.0               # optional fixed Stage 1 cosine-distance gate (2.0 = off: pure top-m retrieval)
+  initial_bypass_threshold: 0.1 # Stage 2 score threshold (normalized units); replaced by conformal calibration
+  decay_half_life: 500.0      # tau_half for IUDI eviction (in memory clock ticks)
+  prepopulate_max_windows: 4000
+  online_update: false        # true = also insert test-time misses (streaming memory)
+
+certification:
+  target_risk_alpha: 0.05       # bound on P(bypass AND false merge) per query
+  false_merge_tolerance: 0.10   # tau: allowed MAE inflation of a bypass vs the full network
+  audit_prob: 0.10              # fraction of bypasses re-run through the full network
+  learning_rate_conformal: 0.001
+  min_bypass_threshold: 0.0
+  max_bypass_threshold: 2.0
 
 training:
   epochs: 10
   lr: 0.001
+  lr_schedule: "type1"  # halve lr every epoch (TSLib default)
   weight_decay: 0.0001
   grad_clip: 1.0
   patience: 3
-  seed: 42
+  seed: 2021
+  align_weight: 0.1     # EPS key alignment loss weight
+  align_key_margin: 0.3
+  align_max_rows: 256

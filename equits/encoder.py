@@ -57,12 +57,16 @@ class CIModernEncoder(nn.Module):
         d_model: int = 64,
         kernel_size: int = 31,
         eps_dim: int = 16,
-        dropout: float = 0.1
+        dropout: float = 0.1,
+        eps_detach_backbone: bool = True
     ):
         super().__init__()
         self.lookback = lookback
         self.d_model = d_model
         self.eps_dim = eps_dim
+        # If True, the EPS alignment loss only trains the EPS projection, so the
+        # forecasting backbone (and the no-memory ablation) is unaffected by it.
+        self.eps_detach_backbone = eps_detach_backbone
         
         # Layer 1: Shallow Temporal Feature Extractor
         self.layer1 = LargeKernelDepthwiseBlock(in_channels=1, out_channels=d_model, kernel_size=kernel_size, dropout=dropout)
@@ -91,6 +95,8 @@ class CIModernEncoder(nn.Module):
         """
         h1 = self.layer1(x_ci)
         pooled = self.eps_pool(h1).squeeze(-1) # [B * D, d_model]
+        if self.eps_detach_backbone:
+            pooled = pooled.detach()
         k = F.normalize(self.eps_proj(pooled), p=2, dim=-1) # Unit-norm key in S^{d-1}
         return h1, k
 

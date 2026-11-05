@@ -52,6 +52,18 @@ class RevIN(nn.Module):
             x = x + self.affine_bias
         return x
 
+    def denorm_logvar(self, logvar: torch.Tensor) -> torch.Tensor:
+        """
+        Maps a log-variance predicted in RevIN-normalized space back to data space.
+        Denormalization is affine: y = (x - b) / (w + eps^2) * stdev + mean, so
+        Var[y] = Var[x] * (stdev / (w + eps^2))^2.
+        logvar: [B, H, D]
+        """
+        log_scale = torch.log(self.stdev)
+        if self.affine:
+            log_scale = log_scale - torch.log(torch.abs(self.affine_weight + self.eps * self.eps))
+        return logvar + 2.0 * log_scale
+
     def _denormalize(self, x: torch.Tensor) -> torch.Tensor:
         if self.affine:
             x = x - self.affine_bias

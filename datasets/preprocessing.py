@@ -1,5 +1,5 @@
 """
-Data preprocessing and normalization module for PEC-Net.
+Data preprocessing and normalization module for EquiTS.
 Enforces strict train-only fitting to guarantee zero target leakage.
 """
 

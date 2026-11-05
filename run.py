@@ -1,153 +1,158 @@
 """
-EquiTS: Official Multi-Dataset Benchmark & Training Runner.
-Standard entrypoint to train and benchmark all models (Baselines vs. EquiTS)
-across multiple benchmark datasets (ETTh1, ETTm1, Weather) under identical protocols.
+EquiTS: Multi-Dataset Benchmark & Training Runner.
+
+Trains and evaluates baselines and EquiTS under one protocol (TSLib splits,
+L=96, H in {96, 192, 336, 720}), so results can be placed next to numbers
+published in TSLib-based papers.
 
 Usage:
-    python run.py --dataset ETTm1 --model all --epochs 3 --device cpu
-    python run.py --dataset ETTh1 --model all --epochs 3 --device cpu
-    python run.py --dataset all --epochs 3 --device cpu
+    python run.py --dataset ETTh1 --model EquiTS --horizon 96 --device cuda
+    python run.py --dataset all --model all --horizon all --seeds 2021 2022 2023 --device cuda
 """
 
 import os
-import sys
 import json
-import yaml
 import argparse
+from collections import defaultdict
+
+import numpy as np
 import torch
+import yaml
 
 from experiments.exp_forecasting import Exp_Forecasting
 from datasets.loader import DATASET_CONFIGS
 
+BASELINES = ["Persistence", "Linear", "DLinear", "PatchLinear", "LSTM", "TCN"]
+ALL_DATASETS = ["ETTh1", "ETTm1", "Weather"]
+ALL_HORIZONS = [96, 192, 336, 720]
 
-def print_results_matrix(results_list, dataset_name):
-    print("\n" + "=" * 94)
-    print(f"               OFFICIAL PUBLICATION BENCHMARK MATRIX ({dataset_name})               ")
-    print("=" * 94)
-    header = f"{'Model':<24} | {'Parameters':<10} | {'MAE':<7} | {'MSE':<7} | {'Latency (ms)':<14} | {'Bypass %':<8}"
-    print(header)
-    print("-" * 94)
-    for r in results_list:
-        row = f"{r['Model']:<24} | {r['Parameters']:<10} | {r['MAE']:<7} | {r['MSE']:<7} | {r['Latency (ms)']:<14} | {r['Bypass (%)']}"
-        print(row)
-    print("=" * 94)
+TABLE_COLS = ["Model", "Parameters", "MSE", "MAE", "Highway-only MSE", "Highway-only MAE", "NLL", "Cov90", "Latency (ms)", "Bypass (%)",
+              "Audit overhead (%)", "FMR among audited bypasses", "Est. false-bypass risk", "Val bypass (%)",
+              "Bypass threshold (cal -> final)"]
 
 
-def save_results(results_list, dataset_name, out_dir="results"):
+def make_config(base_cfg, dataset, horizon):
+    cfg = yaml.safe_load(yaml.dump(base_cfg))  # deep copy
+    cfg["dataset"]["name"] = dataset
+    cfg["dataset"]["horizon"] = horizon
+    if dataset in DATASET_CONFIGS:
+        info = DATASET_CONFIGS[dataset]
+        cfg["dataset"]["data_path"] = info["file"]
+        cfg["dataset"]["download_url"] = info["url"]
+        cfg["dataset"]["num_channels"] = info["num_channels"]
+        cfg["dataset"]["train_ratio"] = info["train_ratio"]
+        cfg["dataset"]["val_ratio"] = info["val_ratio"]
+    return cfg
+
+
+def run_one(cfg, model_names, args, device, seed):
+    results = []
+    for name in model_names:
+        if name.lower().startswith("equits"):
+            continue
+        print(f"\n>>> {name} | {cfg['dataset']['name']} H={cfg['dataset']['horizon']} seed={seed}")
+        exp = Exp_Forecasting(cfg, name, device, seed=seed)
+        exp.train(args.epochs)
+        results.append(exp.test())
+
+    if any(n.lower().startswith("equits") for n in model_names):
+        print(f"\n>>> EquiTS | {cfg['dataset']['name']} H={cfg['dataset']['horizon']} seed={seed}")
+        exp = Exp_Forecasting(cfg, "EquiTS", device, seed=seed)
+        exp.train(args.epochs)
+        results.append(exp.test())                       # no-memory variant
+        if cfg.get("memory", {}).get("enabled", False):
+            exp.prepare_memory()
+            for a in args.alphas:
+                results.append(exp.test_rcpq(alpha=a))   # memory bypass variants
+    return results
+
+
+def aggregate(records):
+    """Mean +/- std of numeric metrics over seeds, grouped by (dataset, horizon, model)."""
+    groups = defaultdict(list)
+    for r in records:
+        groups[(r["Dataset"], r["Horizon"], r["Model"])].append(r)
+    rows = []
+    for (ds, h, model), rs in groups.items():
+        row = {"Dataset": ds, "Horizon": h, "Model": model, "Seeds": len(rs)}
+        for k, v in rs[0].items():
+            if k in row or k == "Seed":
+                continue
+            vals = [x[k] for x in rs]
+            if all(isinstance(x, int) for x in vals) and len(set(vals)) == 1:
+                row[k] = vals[0]
+            elif all(isinstance(x, (int, float)) for x in vals):
+                mean = float(np.mean(vals))
+                row[k] = f"{mean:.4f} ± {np.std(vals):.4f}" if len(vals) > 1 and k in ("MSE", "MAE") else round(mean, 4)
+            else:
+                row[k] = vals[0]
+        rows.append(row)
+    return rows
+
+
+def write_tables(rows, out_dir, tag):
     os.makedirs(out_dir, exist_ok=True)
-    json_path = os.path.join(out_dir, f"benchmark_{dataset_name.lower()}_results.json")
-    md_path = os.path.join(out_dir, f"benchmark_{dataset_name.lower()}_table.md")
-    
-    with open(json_path, "w") as f:
-        json.dump(results_list, f, indent=2)
-        
-    md_lines = [
-        f"# Official Comparative Benchmark Matrix ({dataset_name})",
-        "",
-        f"Evaluated on {dataset_name} ($L=96, H=96$) under standardized chronological splits:",
-        "",
-        "| Model | Parameters | MAE (lower is better) | MSE (lower is better) | Latency (ms/sample) | Bypass / Hit Rate |",
-        "| :--- | :--- | :--- | :--- | :--- | :--- |"
-    ]
-    for r in results_list:
-        md_lines.append(f"| **{r['Model']}** | {r['Parameters']} | **{r['MAE']}** | **{r['MSE']}** | {r['Latency (ms)']} ms | {r['Bypass (%)']} |")
-        
-    with open(md_path, "w") as f:
-        f.write("\n".join(md_lines) + "\n")
-        
-    print(f"\nSaved benchmark matrix for {dataset_name} to:")
-    print(f"  - Markdown Table: {md_path}")
-    print(f"  - JSON Results:   {json_path}")
-
-
-def run_benchmark_for_dataset(dataset_name, config, args, device):
-    cfg = yaml.safe_load(yaml.dump(config)) # deep copy
-    cfg["dataset"]["name"] = dataset_name
-    
-    # Auto-populate dataset settings
-    if dataset_name in DATASET_CONFIGS:
-        ds_info = DATASET_CONFIGS[dataset_name]
-        cfg["dataset"]["data_path"] = ds_info["file"]
-        cfg["dataset"]["download_url"] = ds_info["url"]
-        cfg["dataset"]["num_channels"] = ds_info["num_channels"]
-        cfg["dataset"]["train_ratio"] = ds_info["train_ratio"]
-        cfg["dataset"]["val_ratio"] = ds_info["val_ratio"]
-
-    print(f"\n" + "#" * 70)
-    print(f"   STARTING BENCHMARK: {dataset_name} (Channels: {cfg['dataset']['num_channels']}, Horizon: {cfg['dataset']['horizon']})")
-    print("#" * 70)
-
-    if args.model.lower() in ["our", "equits"]:
-        models_to_run = ["EquiTS_NoMem", "EquiTS_RCPQ"]
-    elif args.model.lower() == "all":
-        models_to_run = ["DLinear", "PatchLinear", "LSTM", "TCN", "EquiTS_NoMem", "EquiTS_RCPQ"]
-    else:
-        models_to_run = [args.model]
-
-    all_results = []
-    for model_name in models_to_run:
-        print(f"\n>>> Running Experiment for: {model_name} on {dataset_name}")
-        exp = Exp_Forecasting(config=cfg, model_name=model_name, device=device)
-        
-        # 1. Train model from scratch on identical splits
-        exp.train(epochs=args.epochs)
-        
-        # 2. Test best model checkpoint on held-out test split
-        test_metrics = exp.test(use_memory_quotienting=("RCPQ" in model_name))
-        all_results.append(test_metrics)
-
-    print_results_matrix(all_results, dataset_name)
-    save_results(all_results, dataset_name, out_dir="results")
-    return all_results
+    lines = [f"# EquiTS Benchmark ({tag})", "",
+             "TSLib splits, L=96, metrics on the standardized test split. "
+             "MSE/MAE are mean ± std over seeds when several seeds were run.", ""]
+    by_block = defaultdict(list)
+    for r in rows:
+        by_block[(r["Dataset"], r["Horizon"])].append(r)
+    for (ds, h), rs in sorted(by_block.items()):
+        cols = [c for c in TABLE_COLS if any(c in r for r in rs)]
+        lines += [f"### {ds}, H={h}", "", "| " + " | ".join(cols) + " |", "|" + " :--- |" * len(cols)]
+        for r in rs:
+            lines.append("| " + " | ".join(str(r.get(c, "-")) for c in cols) + " |")
+        lines.append("")
+    md = os.path.join(out_dir, f"benchmark_{tag}.md")
+    with open(md, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"\nSaved table: {md}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Official Multi-Dataset Benchmark Runner")
-    parser.add_argument("--config", type=str, default="configs/default.yaml", help="Path to config file")
-    parser.add_argument("--dataset", type=str, default="ETTh1", help="Dataset to benchmark: ETTh1, ETTm1, Weather, or all")
-    parser.add_argument("--model", type=str, default="EquiTS", help="Model to run: EquiTS (default: runs our model variants), all, or specific model")
-    parser.add_argument("--horizon", type=int, default=None, help="Forecast horizon H (e.g. 96, 192, 336, 720)")
-    parser.add_argument("--epochs", type=int, default=3, help="Training epochs per model")
-    parser.add_argument("--device", type=str, default="cpu", help="Device: cpu or cuda")
-    args = parser.parse_args()
+    p = argparse.ArgumentParser(description="EquiTS benchmark runner")
+    p.add_argument("--config", default="configs/default.yaml")
+    p.add_argument("--dataset", default="ETTh1", help="ETTh1, ETTm1, Weather, or all")
+    p.add_argument("--model", default="EquiTS", help="EquiTS, all, or a single baseline name")
+    p.add_argument("--horizon", default="96", help="96, 192, 336, 720, or all")
+    p.add_argument("--epochs", type=int, default=10)
+    p.add_argument("--seeds", type=int, nargs="+", default=None, help="Default: training.seed from config")
+    p.add_argument("--alphas", type=float, nargs="+", default=None,
+                   help="Target false-bypass risk levels for RCPQ (default: certification.target_risk_alpha)")
+    p.add_argument("--device", default="cpu")
+    p.add_argument("--out_dir", default="results")
+    args = p.parse_args()
 
-    with open(args.config, "r") as f:
-        config = yaml.safe_load(f)
+    with open(args.config) as f:
+        base_cfg = yaml.safe_load(f)
+    seeds = args.seeds or [base_cfg["training"].get("seed", 42)]
+    if args.alphas is None:
+        args.alphas = [base_cfg.get("certification", {}).get("target_risk_alpha", 0.05)]
 
-    if args.horizon is not None:
-        config["dataset"]["horizon"] = args.horizon
-
-    device = torch.device(args.device if torch.cuda.is_available() and args.device == "cuda" else "cpu")
-    print(f"Device: {device} | Lookback: {config['dataset']['lookback']} | Horizon: {config['dataset']['horizon']}")
-
-    if args.dataset.lower() == "all":
-        datasets = ["ETTh1", "ETTm1", "Weather"]
+    device = torch.device("cuda" if args.device == "cuda" and torch.cuda.is_available() else "cpu")
+    datasets = ALL_DATASETS if args.dataset.lower() == "all" else [args.dataset]
+    horizons = ALL_HORIZONS if args.horizon.lower() == "all" else [int(args.horizon)]
+    if args.model.lower() == "all":
+        models = BASELINES + ["EquiTS"]
+    elif args.model.lower() in ("equits", "our"):
+        models = ["EquiTS"]
     else:
-        datasets = [args.dataset]
+        models = [args.model]
 
-    multi_results = {}
+    print(f"Device: {device} | datasets={datasets} horizons={horizons} models={models} seeds={seeds}")
+    records = []
     for ds in datasets:
-        multi_results[ds] = run_benchmark_for_dataset(ds, config, args, device)
+        for h in horizons:
+            cfg = make_config(base_cfg, ds, h)
+            for s in seeds:
+                records += run_one(cfg, models, args, device, s)
 
-    # If multiple datasets, generate combined cross-dataset markdown table
-    if len(datasets) > 1:
-        md_path = "results/benchmark_multidataset_summary.md"
-        lines = [
-            "# Multi-Dataset Comprehensive Benchmark Summary",
-            "",
-            "Comparative evaluation across distinct temporal sampling regimes (Hourly vs. 15-Minute):",
-            ""
-        ]
-        for ds, res_list in multi_results.items():
-            lines.append(f"### {ds} ($L=96, H=96$)")
-            lines.append("| Model | Parameters | MAE | MSE | Latency (ms) | Bypass % |")
-            lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
-            for r in res_list:
-                lines.append(f"| **{r['Model']}** | {r['Parameters']} | **{r['MAE']}** | **{r['MSE']}** | {r['Latency (ms)']} ms | {r['Bypass (%)']} |")
-            lines.append("")
-        with open(md_path, "w") as f:
-            f.write("\n".join(lines))
-        print(f"\nMulti-dataset summary table saved to: {md_path}")
+    tag = "_".join(datasets).lower() + "_H" + "-".join(map(str, horizons))
+    os.makedirs(args.out_dir, exist_ok=True)
+    with open(os.path.join(args.out_dir, f"benchmark_{tag}_raw.json"), "w") as f:
+        json.dump(records, f, indent=2)
+    write_tables(aggregate(records), args.out_dir, tag)
 
 
 if __name__ == "__main__":

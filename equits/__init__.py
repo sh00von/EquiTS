@@ -11,7 +11,7 @@ from equits.divergence import (
     compute_prototype_distances
 )
 from equits.losses import GaussianNLLLoss, EPSMetricAlignmentLoss, compute_forecast_metrics
-from equits.certification import OnlineAdaptiveCRC, FalseMergeMonitor
+from equits.certification import OnlineAdaptiveCRC, split_crc_threshold, false_merge_indicator
 
 __all__ = [
     "EquiTS",
@@ -28,6 +28,7 @@ __all__ = [
     "EPSMetricAlignmentLoss",
     "compute_forecast_metrics",
     "OnlineAdaptiveCRC",
-    "FalseMergeMonitor"
+    "split_crc_threshold",
+    "false_merge_indicator"
 ]
 
