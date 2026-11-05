@@ -26,7 +26,7 @@ backbone:
 
 prediction_head:
   type: "dual_probabilistic" # mu and logvar
-  min_logvar: -8.0
+  min_logvar: -4.0 # numerical stability for high-dimensional channels
   max_logvar: 6.0
 
 memory:
