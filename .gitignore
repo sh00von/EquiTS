@@ -85,5 +85,6 @@ scratch/
 PAPER_MANUSCRIPT.md
 *.tex
 *manuscript*
+paper/
 
 
