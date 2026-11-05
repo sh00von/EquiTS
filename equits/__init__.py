@@ -1,34 +1,22 @@
-from equits.model import EquiTS
-from equits.revin import RevIN
-from equits.encoder import CIModernEncoder
-from equits.predictor import DualProbabilisticHead
-from equits.memory import EquivalenceMemoryBank
-from equits.divergence import (
-    exact_diagonal_gaussian_kl,
-    symmetric_gaussian_kl,
-    mean_information_divergence_rate,
-    root_mean_squared_wasserstein_2,
-    compute_prototype_distances
+"""
+EquiTS: Equivariant Time Series normalization.
+
+A plug-in layer that turns any point forecaster into a calibrated probabilistic
+forecaster: affine-equivariant canonicalization with a relaxed scale (safe on flat
+windows) for the mean path, and a decoupled scale head for the predictive variance.
+"""
+
+from equits.canonicalizer import Canonicalizer, relaxed_scale, MODES
+from equits.layer import EquiTS, ScaleHead
+from equits.metrics import (
+    gaussian_nll, gaussian_crps, point_metrics, interval_metrics,
+    conformal_interval, conformal_quantile, normal_z,
 )
-from equits.losses import GaussianNLLLoss, EPSMetricAlignmentLoss, compute_forecast_metrics
-from equits.certification import OnlineAdaptiveCRC, split_crc_threshold, false_merge_indicator
+
+__version__ = "0.2.0"
 
 __all__ = [
-    "EquiTS",
-    "RevIN",
-    "CIModernEncoder",
-    "DualProbabilisticHead",
-    "EquivalenceMemoryBank",
-    "exact_diagonal_gaussian_kl",
-    "symmetric_gaussian_kl",
-    "mean_information_divergence_rate",
-    "root_mean_squared_wasserstein_2",
-    "compute_prototype_distances",
-    "GaussianNLLLoss",
-    "EPSMetricAlignmentLoss",
-    "compute_forecast_metrics",
-    "OnlineAdaptiveCRC",
-    "split_crc_threshold",
-    "false_merge_indicator"
+    "EquiTS", "ScaleHead", "Canonicalizer", "relaxed_scale", "MODES",
+    "gaussian_nll", "gaussian_crps", "point_metrics", "interval_metrics",
+    "conformal_interval", "conformal_quantile", "normal_z",
 ]
-

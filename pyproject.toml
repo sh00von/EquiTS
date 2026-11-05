@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "equits"
+version = "0.2.0"
+description = "EquiTS: affine-equivariant distributional normalization that turns any point forecaster into a calibrated probabilistic forecaster"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["torch>=2.0", "numpy>=1.23"]
+
+[project.optional-dependencies]
+experiments = ["pandas>=1.5", "scikit-learn>=1.0", "einops>=0.6"]
+test = ["pytest>=7.0"]
+
+[tool.setuptools]
+packages = ["equits"]
