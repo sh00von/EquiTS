@@ -86,5 +86,6 @@ PAPER_MANUSCRIPT.md
 *.tex
 *manuscript*
 paper/
+*.zip
 
 
