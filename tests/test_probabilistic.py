@@ -6,7 +6,7 @@ import torch
 from equits.probabilistic import (
     gaussian_crps, interval_metrics, conformal_quantile, conformal_interval, normal_z
 )
-from baselines import DLinearGauss
+from baselines import DLinearGauss, RLinearGauss
 
 
 def test_gaussian_crps_matches_monte_carlo():
@@ -65,3 +65,15 @@ def test_dlinear_gauss_shapes():
     mu, lv = m(torch.randn(5, 96, 3))
     assert mu.shape == lv.shape == (5, 24, 3)
     assert torch.isfinite(lv).all()
+
+
+def test_rlinear_gauss_variance_scales_with_input():
+    torch.manual_seed(0)
+    m = RLinearGauss(lookback=96, horizon=24, num_channels=2)
+    x = torch.randn(4, 96, 2)
+    mu1, lv1 = m(x)
+    mu2, lv2 = m(x * 10.0)
+    assert mu1.shape == lv1.shape == (4, 24, 2)
+    # 10x input scale -> 100x variance (up to the small variance floor)
+    ratio = torch.exp(lv2 - lv1)
+    assert torch.allclose(ratio, torch.full_like(ratio, 100.0), rtol=0.05)

@@ -36,7 +36,7 @@ from equits.losses import (
 )
 from equits.divergence import compute_prototype_distances
 from equits.certification import false_merge_indicator, split_crc_threshold, OnlineAdaptiveCRC
-from baselines import DLinear, DLinearGauss, PatchLinear, LSTM, TCN, Persistence, Linear
+from baselines import DLinear, DLinearGauss, RLinearGauss, PatchLinear, LSTM, TCN, Persistence, Linear
 from equits.probabilistic import gaussian_crps, interval_metrics, conformal_interval, normal_z
 
 
@@ -116,6 +116,10 @@ class Exp_Forecasting:
             return Persistence(**kw)
         if name == "linear":
             return Linear(**kw)
+        if name == "rlinear-gauss":
+            ph = self.config["prediction_head"]
+            return RLinearGauss(**kw, var_floor=ph.get("data_var_floor", 1e-2),
+                                min_logvar=ph.get("min_logvar", -8.0), max_logvar=ph.get("max_logvar", 6.0))
         if "dlinear" in name and "gauss" in name:
             return DLinearGauss(**kw, var_floor=self.config["prediction_head"].get("data_var_floor", 1e-2))
         if "dlinear" in name:

@@ -22,7 +22,7 @@ import yaml
 from experiments.exp_forecasting import Exp_Forecasting
 from datasets.loader import DATASET_CONFIGS
 
-BASELINES = ["Persistence", "Linear", "DLinear", "DLinear-Gauss", "PatchLinear", "LSTM", "TCN"]
+BASELINES = ["Persistence", "Linear", "DLinear", "DLinear-Gauss", "RLinear-Gauss", "PatchLinear", "LSTM", "TCN"]
 ALL_DATASETS = ["ETTh1", "ETTm1", "Weather"]
 ALL_HORIZONS = [96, 192, 336, 720]
 
