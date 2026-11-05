@@ -77,7 +77,9 @@ def run_benchmark_for_dataset(dataset_name, config, args, device):
     print(f"   STARTING BENCHMARK: {dataset_name} (Channels: {cfg['dataset']['num_channels']}, Horizon: {cfg['dataset']['horizon']})")
     print("#" * 70)
 
-    if args.model.lower() == "all":
+    if args.model.lower() in ["our", "equits"]:
+        models_to_run = ["EquiTS_NoMem", "EquiTS_RCPQ"]
+    elif args.model.lower() == "all":
         models_to_run = ["DLinear", "PatchLinear", "LSTM", "TCN", "EquiTS_NoMem", "EquiTS_RCPQ"]
     else:
         models_to_run = [args.model]
@@ -103,7 +105,7 @@ def main():
     parser = argparse.ArgumentParser(description="Official Multi-Dataset Benchmark Runner")
     parser.add_argument("--config", type=str, default="configs/default.yaml", help="Path to config file")
     parser.add_argument("--dataset", type=str, default="ETTh1", help="Dataset to benchmark: ETTh1, ETTm1, Weather, or all")
-    parser.add_argument("--model", type=str, default="all", help="Model to run: all, DLinear, PatchLinear, LSTM, TCN, EquiTS_NoMem, EquiTS_RCPQ")
+    parser.add_argument("--model", type=str, default="EquiTS", help="Model to run: EquiTS (default: runs our model variants), all, or specific model")
     parser.add_argument("--horizon", type=int, default=None, help="Forecast horizon H (e.g. 96, 192, 336, 720)")
     parser.add_argument("--epochs", type=int, default=3, help="Training epochs per model")
     parser.add_argument("--device", type=str, default="cpu", help="Device: cpu or cuda")
