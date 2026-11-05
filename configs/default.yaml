@@ -32,7 +32,7 @@ prediction_head:
   data_var_floor: 0.01 # variance floor in standardized data units (stabilizes NLL on flat windows)
 
 memory:
-  enabled: true
+  enabled: false  # optional computational bypass (experimental; off for the main results)
   max_prototypes: 512 # K
   eps_dim: 16        # d (Early Predictive Signature key dimension)
   eps_detach_backbone: true # key alignment loss trains only the EPS projection
@@ -52,6 +52,9 @@ certification:
   learning_rate_conformal: 0.001
   min_bypass_threshold: 0.0
   max_bypass_threshold: 2.0
+
+evaluation:
+  interval_alpha: 0.1   # nominal 90% prediction intervals
 
 training:
   epochs: 10

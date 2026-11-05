@@ -22,11 +22,13 @@ import yaml
 from experiments.exp_forecasting import Exp_Forecasting
 from datasets.loader import DATASET_CONFIGS
 
-BASELINES = ["Persistence", "Linear", "DLinear", "PatchLinear", "LSTM", "TCN"]
+BASELINES = ["Persistence", "Linear", "DLinear", "DLinear-Gauss", "PatchLinear", "LSTM", "TCN"]
 ALL_DATASETS = ["ETTh1", "ETTm1", "Weather"]
 ALL_HORIZONS = [96, 192, 336, 720]
 
-TABLE_COLS = ["Model", "Parameters", "MSE", "MAE", "Highway-only MSE", "Highway-only MAE", "NLL", "Cov90", "Latency (ms)", "Bypass (%)",
+TABLE_COLS = ["Model", "Parameters", "MSE", "MAE", "Highway-only MSE", "Highway-only MAE",
+              "NLL", "CRPS", "Cov90", "Width90", "IS90", "CP Cov90", "CP Width90", "CP IS90",
+              "Latency (ms)", "Bypass (%)",
               "Audit overhead (%)", "FMR among audited bypasses", "Est. false-bypass risk", "Val bypass (%)",
               "Bypass threshold (cal -> final)"]
 
@@ -59,11 +61,11 @@ def run_one(cfg, model_names, args, device, seed):
         print(f"\n>>> EquiTS | {cfg['dataset']['name']} H={cfg['dataset']['horizon']} seed={seed}")
         exp = Exp_Forecasting(cfg, "EquiTS", device, seed=seed)
         exp.train(args.epochs)
-        results.append(exp.test())                       # no-memory variant
+        results.append(exp.test())
         if cfg.get("memory", {}).get("enabled", False):
             exp.prepare_memory()
             for a in args.alphas:
-                results.append(exp.test_rcpq(alpha=a))   # memory bypass variants
+                results.append(exp.test_rcpq(alpha=a))   # optional memory bypass (memory.enabled)
     return results
 
 

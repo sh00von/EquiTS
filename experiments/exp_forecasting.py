@@ -36,7 +36,8 @@ from equits.losses import (
 )
 from equits.divergence import compute_prototype_distances
 from equits.certification import false_merge_indicator, split_crc_threshold, OnlineAdaptiveCRC
-from baselines import DLinear, PatchLinear, LSTM, TCN, Persistence, Linear
+from baselines import DLinear, DLinearGauss, PatchLinear, LSTM, TCN, Persistence, Linear
+from equits.probabilistic import gaussian_crps, interval_metrics, conformal_interval, normal_z
 
 
 def set_seed(seed: int):
@@ -78,6 +79,8 @@ class Exp_Forecasting:
 
         self.is_equits = "equits" in model_name.lower()
         self.model = self._build_model().to(self.device)
+        self.is_prob = self.is_equits or getattr(self.model, "probabilistic", False)
+        self.alpha = config.get("evaluation", {}).get("interval_alpha", 0.1)
         self.trainable = any(p.requires_grad for p in self.model.parameters())
 
         tr = config["training"]
@@ -113,6 +116,8 @@ class Exp_Forecasting:
             return Persistence(**kw)
         if name == "linear":
             return Linear(**kw)
+        if "dlinear" in name and "gauss" in name:
+            return DLinearGauss(**kw, var_floor=self.config["prediction_head"].get("data_var_floor", 1e-2))
         if "dlinear" in name:
             return DLinear(**kw)
         if "patch" in name:
@@ -156,6 +161,9 @@ class Exp_Forecasting:
             self.optimizer.zero_grad()
             if self.is_equits:
                 loss = self._equits_loss(x, y)
+            elif self.is_prob:
+                mu, logvar = self.model(x)
+                loss = self.criterion_nll(mu, logvar, y)
             else:
                 loss = self.criterion_mse(self.model(x), y)
             loss.backward()
@@ -164,17 +172,23 @@ class Exp_Forecasting:
             total += loss.item()
         return total / max(1, len(self.train_loader))
 
+    def _forward(self, x):
+        """Returns (mu, logvar) for probabilistic models, (pred, None) otherwise."""
+        if self.is_equits:
+            mu, lv, _, _ = self.model(x)
+            return mu, lv
+        if self.is_prob:
+            return self.model(x)
+        return self.model(x), None
+
     @torch.no_grad()
     def _predict(self, loader) -> Tuple[torch.Tensor, Optional[torch.Tensor], torch.Tensor]:
         self.model.eval()
         preds, logvars, targets = [], [], []
         for x, y in loader:
-            x = x.to(self.device)
-            if self.is_equits:
-                mu, lv, _, _ = self.model(x)
+            mu, lv = self._forward(x.to(self.device))
+            if lv is not None:
                 logvars.append(lv.cpu())
-            else:
-                mu = self.model(x)
             preds.append(mu.cpu())
             targets.append(y)
         lv = torch.cat(logvars) if logvars else None
@@ -234,12 +248,9 @@ class Exp_Forecasting:
         _sync(self.device)
         t0 = time.perf_counter()
         for x, y in self.test_loader:
-            x = x.to(self.device)
-            if self.is_equits:
-                mu, lv, _, _ = self.model(x)
+            mu, lv = self._forward(x.to(self.device))
+            if lv is not None:
                 logvars.append(lv)
-            else:
-                mu = self.model(x)
             preds.append(mu)
             targets.append(y)
         _sync(self.device)
@@ -247,10 +258,11 @@ class Exp_Forecasting:
 
         pred = torch.cat(preds).cpu()
         y = torch.cat(targets)
-        name = "EquiTS_NoMem" if self.is_equits else self.model_name
+        logvar = torch.cat(logvars).cpu() if logvars else None
+        name = "EquiTS" if self.is_equits else self.model_name
         res = self._base_record(name, pred, y, elapsed)
+        res.update(self._interval_metrics(pred, logvar, y))
         if self.is_equits:
-            res.update(self._prob_metrics(pred, torch.cat(logvars).cpu(), y))
             # Ablation: does the deep trunk improve on the linear highway alone?
             hw = torch.cat([self.model.forward_highway_only(x.to(self.device)).cpu()
                             for x, _ in self.test_loader])
@@ -284,6 +296,35 @@ class Exp_Forecasting:
     def _prob_metrics(self, mu, logvar, y) -> Dict[str, Any]:
         nll = GaussianNLLLoss(include_constant=True)(mu, logvar, y).item()
         return {"NLL": round(nll, 4), "Cov90": round(gaussian_interval_coverage(mu, logvar, y), 4)}
+
+    @torch.no_grad()
+    def _interval_metrics(self, pred, logvar, y) -> Dict[str, Any]:
+        """
+        Test-set uncertainty metrics at nominal level 1 - alpha.
+          Gaussian (probabilistic models only): the model's own mu +/- z*sigma interval, NLL, CRPS.
+          CP (every model): split conformal interval calibrated on the validation split;
+              absolute residuals for point models, residuals normalized by sigma for
+              probabilistic models (adaptive width).
+        """
+        a = self.alpha
+        r = lambda v: round(v, 4)
+        out: Dict[str, Any] = {}
+        val_pred, val_lv, val_y = self._predict(self.val_loader)
+
+        if logvar is not None:
+            sigma = torch.exp(0.5 * logvar)
+            z = normal_z(a)
+            g = interval_metrics(pred - z * sigma, pred + z * sigma, y, a)
+            nll = GaussianNLLLoss(include_constant=True)(pred, logvar, y).item()
+            out.update({"NLL": r(nll), "CRPS": r(gaussian_crps(pred, logvar, y)),
+                        "Cov90": r(g["coverage"]), "Width90": r(g["width"]), "IS90": r(g["interval_score"])})
+            lo, hi = conformal_interval(val_pred, val_y, pred,
+                                        sigma_cal=torch.exp(0.5 * val_lv), sigma_test=sigma, alpha=a)
+        else:
+            lo, hi = conformal_interval(val_pred, val_y, pred, alpha=a)
+        c = interval_metrics(lo, hi, y, a)
+        out.update({"CP Cov90": r(c["coverage"]), "CP Width90": r(c["width"]), "CP IS90": r(c["interval_score"])})
+        return out
 
     # ------------------------------------------------------- RCPQ evaluation
     @torch.no_grad()
@@ -397,7 +438,7 @@ class Exp_Forecasting:
 
         pred = torch.cat(preds).cpu()
         y_all = torch.cat(targets).cpu()
-        res = self._base_record(f"EquiTS_RCPQ(a={alpha})", pred, y_all, elapsed)
+        res = self._base_record(f"EquiTS+memory(a={alpha})", pred, y_all, elapsed)
         res.update(self._prob_metrics(pred, torch.cat(logvars).cpu(), y_all))
         res.update({
             "Alpha": alpha,
