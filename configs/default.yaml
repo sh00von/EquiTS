@@ -1,0 +1,48 @@
+# Configuration for EquiTS (Equivalence-Quotiented Time-Series Network)
+dataset:
+  name: "ETTh1"
+  data_path: "data/ETTh1.csv"
+  download_url: "https://raw.githubusercontent.com/zhouhaoyi/ETDataset/main/ETT-small/ETTh1.csv"
+  target_col: "OT"
+  features: "M"  # Multivariate
+  lookback: 96   # L
+  horizon: 96    # H
+  num_channels: 7 # D for ETTh1
+  train_ratio: 0.6
+  val_ratio: 0.2
+  test_ratio: 0.2
+  batch_size: 32
+  num_workers: 0
+
+backbone:
+  type: "channel_independent_depthwise" # ModernTCN style
+  d_model: 64
+  kernel_size: 31
+  num_layers: 2
+  dropout: 0.1
+  use_revin: true
+  revin_affine: true
+
+prediction_head:
+  type: "dual_probabilistic" # mu and logvar
+  min_logvar: -8.0
+  max_logvar: 6.0
+
+memory:
+  enabled: true
+  max_prototypes: 512 # K
+  eps_dim: 16        # d (Early Predictive Signature key dimension)
+  shortlist_m: 3     # m for Stage 1 screening
+  metric: "wasserstein_normalized" # or "kl_mean_rate"
+  initial_threshold: 0.25 # lambda_0 (in normalized std units)
+  learning_rate_conformal: 0.005 # eta for online CRC
+  target_risk_alpha: 0.05       # alpha (5% maximum false-merge rate)
+  decay_half_life: 500.0        # tau_half for IUDI eviction
+
+training:
+  epochs: 10
+  lr: 0.001
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  patience: 3
+  seed: 42

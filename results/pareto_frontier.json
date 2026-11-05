@@ -1,0 +1,74 @@
+[
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.5201,
+    "MSE": 0.5424,
+    "Latency (ms)": 0.569,
+    "Speedup": "1.00x",
+    "Bypass (%)": 0.0,
+    "Active Prototypes": 0
+  },
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.5409,
+    "MSE": 0.5946,
+    "Latency (ms)": 4.703,
+    "Speedup": "0.12x",
+    "Bypass (%)": 19.06,
+    "Active Prototypes": 512
+  },
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.5807,
+    "MSE": 0.7129,
+    "Latency (ms)": 3.597,
+    "Speedup": "0.16x",
+    "Bypass (%)": 39.82,
+    "Active Prototypes": 512
+  },
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.6067,
+    "MSE": 0.7912,
+    "Latency (ms)": 3.022,
+    "Speedup": "0.19x",
+    "Bypass (%)": 51.14,
+    "Active Prototypes": 512
+  },
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.6721,
+    "MSE": 0.9874,
+    "Latency (ms)": 1.838,
+    "Speedup": "0.31x",
+    "Bypass (%)": 73.26,
+    "Active Prototypes": 512
+  },
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.7186,
+    "MSE": 1.1314,
+    "Latency (ms)": 0.903,
+    "Speedup": "0.63x",
+    "Bypass (%)": 89.38,
+    "Active Prototypes": 512
+  },
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.7352,
+    "MSE": 1.1828,
+    "Latency (ms)": 0.49,
+    "Speedup": "1.16x",
+    "Bypass (%)": 95.62,
+    "Active Prototypes": 512
+  },
+  {
+    "Threshold (lambda)": 0.0,
+    "MAE": 0.7392,
+    "MSE": 1.1954,
+    "Latency (ms)": 0.394,
+    "Speedup": "1.44x",
+    "Bypass (%)": 97.23,
+    "Active Prototypes": 512
+  }
+]

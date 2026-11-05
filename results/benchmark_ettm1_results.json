@@ -1,0 +1,62 @@
+[
+  {
+    "Model": "DLinear",
+    "Parameters": "18,624",
+    "MAE": 0.3939,
+    "MSE": 0.3717,
+    "RMSE": 0.6096,
+    "Latency (ms)": 0.027,
+    "Throughput": 36410.9,
+    "Bypass (%)": "-"
+  },
+  {
+    "Model": "PatchLinear",
+    "Parameters": "16,992",
+    "MAE": 0.3886,
+    "MSE": 0.3659,
+    "RMSE": 0.6049,
+    "Latency (ms)": 0.023,
+    "Throughput": 43479.9,
+    "Bypass (%)": "-"
+  },
+  {
+    "Model": "LSTM",
+    "Parameters": "95,648",
+    "MAE": 0.5638,
+    "MSE": 0.6242,
+    "RMSE": 0.7901,
+    "Latency (ms)": 0.197,
+    "Throughput": 5064.8,
+    "Bypass (%)": "-"
+  },
+  {
+    "Model": "TCN",
+    "Parameters": "70,304",
+    "MAE": 0.5696,
+    "MSE": 0.6409,
+    "RMSE": 0.8006,
+    "Latency (ms)": 0.097,
+    "Throughput": 10329.4,
+    "Bypass (%)": "-"
+  },
+  {
+    "Model": "EquiTS_NoMem",
+    "Parameters": "29,087",
+    "MAE": 0.4593,
+    "MSE": 0.4717,
+    "RMSE": 0.6868,
+    "Latency (ms)": 0.619,
+    "Throughput": 1614.8,
+    "Bypass (%)": "-"
+  },
+  {
+    "Model": "EquiTS_RCPQ",
+    "Parameters": "29,087",
+    "MAE": 0.6715,
+    "MSE": 1.0163,
+    "RMSE": 1.0081,
+    "Latency (ms)": 0.248,
+    "Throughput": 4024.9,
+    "Bypass (%)": 99.77
+  }
+]
