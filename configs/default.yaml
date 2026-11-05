@@ -22,6 +22,7 @@ backbone:
   dropout: 0.1
   use_revin: true
   revin_affine: true
+  use_linear_highway: true
 
 prediction_head:
   type: "dual_probabilistic" # mu and logvar

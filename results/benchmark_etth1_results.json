@@ -1,0 +1,12 @@
+[
+  {
+    "Model": "EquiTS_NoMem",
+    "Parameters": "38,399",
+    "MAE": 0.4566,
+    "MSE": 0.452,
+    "RMSE": 0.6723,
+    "Latency (ms)": 0.603,
+    "Throughput": 1657.0,
+    "Bypass (%)": "-"
+  }
+]

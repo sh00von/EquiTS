@@ -51,6 +51,13 @@ class EquiTS(nn.Module):
             dropout=bb_cfg.get("dropout", 0.1)
         )
         
+        # 2b. Residual Linear Highway (Direct Input-to-Horizon Projection)
+        self.use_linear_highway = bb_cfg.get("use_linear_highway", True)
+        if self.use_linear_highway:
+            self.linear_highway = nn.Linear(self.lookback, self.horizon)
+            nn.init.xavier_uniform_(self.linear_highway.weight, gain=1.0)
+            nn.init.zeros_(self.linear_highway.bias)
+        
         # 3. Probabilistic Prediction Head
         self.pred_head = DualProbabilisticHead(
             d_model=self.d_model,
@@ -103,7 +110,13 @@ class EquiTS(nn.Module):
         # 2. Early Feature Stage & EPS Key Generation
         h1, eps_keys = self.encoder.forward_early(x_ci)
         
-        out_mu = torch.empty(B_eff, self.horizon, device=x.device)
+        # 2b. Compute linear highway base forecast if enabled
+        if self.use_linear_highway:
+            mu_linear = self.linear_highway(x_ci.squeeze(1))
+        else:
+            mu_linear = 0.0
+        
+        out_res_mu = torch.empty(B_eff, self.horizon, device=x.device)
         out_logvar = torch.empty(B_eff, self.horizon, device=x.device)
         hit_mask = torch.zeros(B_eff, dtype=torch.bool, device=x.device)
         
@@ -111,7 +124,7 @@ class EquiTS(nn.Module):
         if self.memory_enabled and not self.training:
             hit_mask, bp_mu, bp_lv, matched_idx = self.memory.query_and_verify_batch(eps_keys, current_step)
             if hit_mask.any():
-                out_mu[hit_mask] = bp_mu[hit_mask]
+                out_res_mu[hit_mask] = bp_mu[hit_mask]
                 out_logvar[hit_mask] = bp_lv[hit_mask]
                 
         # 4. Compute deep trunk & head only for non-bypassed samples (misses)
@@ -121,7 +134,7 @@ class EquiTS(nn.Module):
             z_deep = self.encoder.forward_deep(miss_h1)
             sub_mu, sub_logvar = self.pred_head(z_deep)
             
-            out_mu[miss_mask] = sub_mu
+            out_res_mu[miss_mask] = sub_mu
             out_logvar[miss_mask] = sub_logvar
             
             # Online memory update for misses during streaming
@@ -135,6 +148,9 @@ class EquiTS(nn.Module):
                         current_step=current_step
                     )
                     
+        # Total forecast = Linear Highway Base + Non-linear Deep Residual
+        out_mu = mu_linear + out_res_mu
+        
         # Reshape forecasts back to [B, H, D]
         mu_reshaped = out_mu.view(B, D, self.horizon).permute(0, 2, 1).contiguous()
         logvar_reshaped = out_logvar.view(B, D, self.horizon).permute(0, 2, 1).contiguous()
