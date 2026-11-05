@@ -81,7 +81,7 @@ class Exp_Forecasting:
         self.trainable = any(p.requires_grad for p in self.model.parameters())
 
         tr = config["training"]
-        self.criterion_nll = GaussianNLLLoss()
+        self.criterion_nll = GaussianNLLLoss(beta=tr.get("nll_beta", 0.0))
         self.criterion_mse = nn.MSELoss()
         self.base_lr = tr.get("lr", 0.001)
         self.grad_clip = tr.get("grad_clip", 1.0)

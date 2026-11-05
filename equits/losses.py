@@ -13,10 +13,16 @@ class GaussianNLLLoss(nn.Module):
     """
     Gaussian Negative Log-Likelihood Loss for diagonal Gaussian forecasts.
     NLL = 0.5 * mean( logvar + (Y - mu)^2 * exp(-logvar) ) + constant
+
+    beta > 0 gives beta-NLL (Seitzer et al., ICLR 2022): each term is weighted by
+    stop_grad(var)^beta. Plain NLL (beta=0) scales the mean gradient by 1/var, so
+    hard / high-variance points are under-fit; beta=0.5 is a common compromise and
+    beta=1 makes the mean gradient identical to MSE. Use beta=0 for evaluation.
     """
-    def __init__(self, include_constant: bool = False):
+    def __init__(self, include_constant: bool = False, beta: float = 0.0):
         super().__init__()
         self.include_constant = include_constant
+        self.beta = beta
         self.c = 0.5 * math.log(2.0 * math.pi) if include_constant else 0.0
 
     def forward(
@@ -35,6 +41,8 @@ class GaussianNLLLoss(nn.Module):
         precision = torch.exp(-logvar)
         sq_err = (target - mu) ** 2
         elementwise_nll = 0.5 * (logvar + sq_err * precision) + self.c
+        if self.beta > 0:
+            elementwise_nll = elementwise_nll * torch.exp(self.beta * logvar).detach()
         
         if mask is not None:
             elementwise_nll = elementwise_nll * mask

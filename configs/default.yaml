@@ -29,6 +29,7 @@ prediction_head:
   type: "dual_probabilistic" # mu and logvar
   min_logvar: -4.0 # numerical stability for high-dimensional channels
   max_logvar: 6.0
+  data_var_floor: 0.01 # variance floor in standardized data units (stabilizes NLL on flat windows)
 
 memory:
   enabled: true
@@ -60,6 +61,7 @@ training:
   grad_clip: 1.0
   patience: 3
   seed: 2021
+  nll_beta: 0.5         # beta-NLL weighting (0 = plain Gaussian NLL)
   align_weight: 0.1     # EPS key alignment loss weight
   align_key_margin: 0.3
   align_max_rows: 256

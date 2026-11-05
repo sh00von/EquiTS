@@ -9,6 +9,7 @@ Unified architecture integrating:
 - Two-Stage Hierarchical Memory Bank with Computational Bypass
 """
 
+import math
 from typing import Tuple, Dict, Any
 import torch
 import torch.nn as nn
@@ -57,6 +58,11 @@ class EquiTS(nn.Module):
             nn.init.xavier_uniform_(self.linear_highway.weight, gain=1.0)
             nn.init.zeros_(self.linear_highway.bias)
 
+        # Data-space variance floor (standardized units). Without it, an input window
+        # with a flat channel has RevIN stdev ~ 0, so the predicted variance collapses
+        # and the NLL / its gradients explode.
+        self.log_var_floor = math.log(pred_cfg.get("data_var_floor", 1e-2))
+
         # 3. Probabilistic Prediction Head
         self.pred_head = DualProbabilisticHead(
             d_model=self.d_model,
@@ -100,6 +106,8 @@ class EquiTS(nn.Module):
         if self.use_revin:
             mu = self.revin(mu, mode="denorm")
             logvar = self.revin.denorm_logvar(logvar)
+        # log(var + floor), smooth in var
+        logvar = torch.logaddexp(logvar, torch.full_like(logvar, self.log_var_floor))
         return mu, logvar
 
     def _stage2_input(self, mu_linear: torch.Tensor):
